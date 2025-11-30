@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>饲养 - The Incubation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI&display=swap');
+
+        body {
+            background-color: #000;
+            color: #eee;
+            font-family: 'Press Start 2P', monospace;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* --- 基础场景层 --- */
+        .scene-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0; pointer-events: none; transition: opacity 1.5s ease-in-out;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 0; background: #000;
+        }
+        .scene-layer.active { opacity: 1; pointer-events: auto; z-index: 100; }
+
+        /* --- 崩坏特效 --- */
+        @keyframes flash-kill {
+            0% { filter: invert(0); } 25% { filter: invert(1); } 50% { filter: invert(0); } 75% { filter: invert(1); } 100% { filter: invert(0); }
+        }
+        body.system-collapse { animation: flash-kill 0.08s infinite; background-color: #500; }
+
+        /* --- 警告页 --- */
+        #warning-screen { color: #ccc; padding: 60px; text-align: center; font-family: 'Noto Serif SC'; z-index: 9999; }
+        .warn-icon { font-size: 50px; margin-bottom: 20px; color: red; }
+        .warn-body { font-size: 14px; max-width: 700px; margin: 0 auto; line-height: 1.8; text-align: left; }
+        .warn-hint { margin-top: 60px; font-size: 12px; color: #666; animation: blink 2s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+
+        /* --- 菜单与CG --- */
+        #studio-logo { width: 60%; max-width: 500px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
+        #main-menu { background: url('bg_main.jpg') no-repeat center center; background-size: cover; box-shadow: inset 0 0 0 2000px rgba(0,0,0,0.6); }
+        .game-title { font-family: 'Noto Serif SC'; font-size: 80px; color: #eee; margin-bottom: 10px; text-shadow: 4px 4px 0 #8b0000; }
+        .menu-btn { background: rgba(0,0,0,0.7); border: 1px solid #aaa; color: #eee; padding: 18px 0; margin: 12px; width: 260px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative; z-index: 101; }
+        .menu-btn:hover { background: #fff; color: #000; transform: scale(1.05); }
+        .menu-btn.hidden { display: none !important; }
+        .menu-btn.unlocked { border-color: #ffd700; color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        .menu-btn.unlocked:hover { background: #ffd700; color: #000; }
+
+        #intro-cg-layer { padding: 50px; text-align: center; background-size: cover; background-position: center; box-shadow: inset 0 0 0 2000px rgba(0,0,0,0.7); transition: background-image 1s; }
+        .cg-line { font-family: 'Noto Serif SC'; font-size: 22px; color: #fff; margin-bottom: 30px; animation: fadeUp 1s forwards; }
+        @keyframes fadeUp { from {opacity:0; transform:translateY(20px);} to {opacity:1; transform:translateY(0);} }
+
+        /* --- 游戏机 --- */
+        #device-layer { background: transparent; perspective: 1000px; }
+        #device { 
+            width: 380px; height: 680px; 
+            background: #222; border-radius: 30px; padding: 20px; 
+            border: 4px solid #444; display: flex; flex-direction: column; 
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            transform: scale(0.8); opacity: 0; transition: transform 1s, opacity 1s;
+        }
+        .device-active { transform: scale(1) translateZ(0) !important; opacity: 1 !important; }
+        #device.powered-up { border-color: #ffd700; box-shadow: 0 0 80px rgba(255, 215, 0, 0.4); }
+
+        #screen { 
+            flex: 1; background: linear-gradient(to bottom, #e0e0e0, #c0c0c0); 
+            border: 4px solid #111; border-radius: 10px; margin-bottom: 20px;
+            position: relative; overflow: hidden; display: flex; flex-direction: column;
+        }
+        #character-display { 
+            height: 60%; width: 100%;
+            display: flex; justify-content: center; align-items: flex-end; 
+            position: relative; overflow: hidden; flex-shrink: 0;
+        }
+        #sprite-img { 
+            max-height: 95%; max-width: 90%; 
+            object-fit: contain; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.3));
+            animation: breathe 3s infinite ease-in-out; 
+            transition: all 0.1s;
+        }
+        #sprite-img.collapsing {
+            position: fixed; top: 50%; left: 50%; 
+            width: 80vw; height: 80vh; max-width: none; max-height: none;
+            transform: translate(-50%, -50%); z-index: 9999;
+            animation: flash-kill 0.05s infinite;
+            object-fit: cover;
+        }
+        @keyframes breathe { 0%,100% {transform: translateY(0);} 50% {transform: translateY(-3px);} }
+
+        #text-box { 
+            height: 40%; width: 100%;
+            padding: 15px; font-size: 11px; line-height: 1.6; 
+            background: rgba(255,255,255,0.95); border-top: 2px solid #888; 
+            color: #333; overflow-y: auto; box-sizing: border-box;
+        }
+        #controls-area { height: 130px; }
+        .control-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { border: none; border-bottom: 4px solid rgba(0,0,0,0.3); color: white; font-family: 'Press Start 2P'; font-size: 10px; padding: 15px 0; border-radius: 8px; cursor: pointer; }
+        button:active { transform: translateY(2px); border-bottom: 2px solid rgba(0,0,0,0.3); }
+        .btn-love { background: #ff88aa; } .btn-sin { background: #cc3333; } 
+        .btn-neutral { background: #666; } .btn-confirm { background: #9370db; width: 100%; }
+
+        #sin-menu, #dialogue-menu, #name-screen { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.95); z-index: 50; 
+            display: none; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        .menu-header { color: #ff5555; margin-bottom: 15px; font-size: 12px; }
+        .sin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 90%; }
+        .btn-sin-opt { background: #500; font-size: 10px; padding: 12px 0; }
+        .dialogue-btn { width: 90%; margin: 5px 0; background: #444; text-align: left; padding: 10px; }
+        input[type="text"] { background: #fff; border: 2px solid #9370db; font-family: 'Press Start 2P'; padding: 10px; width: 70%; }
+
+        #boot-terminal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #00ff00; font-family: 'Courier Prime'; font-size: 12px; padding: 20px; z-index: 50; display: none; flex-direction: column; }
+        .boot-line { margin-bottom: 5px; }
+
+        /* --- 蓝屏 --- */
+        .bsod-modern { 
+            background: #0078d7 !important; color: white !important; font-family: 'Segoe UI', sans-serif !important; 
+            padding: 10% 15%; text-align: left !important; 
+            display: flex; flex-direction: column; justify-content: flex-start; 
+            z-index: 99999 !important; opacity: 1 !important; transition: none !important; 
+            cursor: none; width: 100%; height: 100%; box-sizing: border-box; left: 0; top: 0; position: fixed;
+        }
+        .sad-face { font-size: 140px; margin-bottom: 40px; font-weight: lighter; }
+        .bsod-title { font-size: 26px; margin-bottom: 30px; width: 100%; line-height: 1.4; font-weight: 300; }
+        .bsod-text { font-size: 16px; margin-bottom: 5px; }
+        .bsod-footer { display: flex; align-items: flex-start; margin-top: 40px; }
+        .bsod-qr-img { width: 100px; height: 100px; margin-right: 20px; } 
+        .bsod-details { font-size: 13px; line-height: 1.6; margin-top: 5px; }
+
+        /* --- 职员表（滚动字幕美化）--- */
+        #credits-layer { background: #000; z-index: 9000; text-align: center; }
+        .credits-bg { position: absolute; top:0; left:0; width: 100%; height: 100%; object-fit: cover; opacity: 0.4; }
+        .credits-scroll { position: absolute; width: 100%; top: 100vh; }
+        .credits-scroll.rolling { animation: scroll-up 50s linear forwards; }
+        @keyframes scroll-up { 100% { transform: translateY(-200%); top: 0; } }
+        .credits-content { 
+            color: #fff; 
+            font-family: 'Noto Serif SC', serif; 
+            font-size: 24px; /* ← 字体加大 */
+            line-height: 1.8; /* ← 行距优化 */
+            padding-bottom: 200px; 
+            width: 100%; 
+            text-shadow: 0 0 5px #000; 
+        }
+        .credits-header { font-size: 36px; margin: 40px 0; }
+        .credits-section { margin: 20px 0; }
+        .credits-role { color: #ffcc00; }
+        .credits-name { color: #fff; }
+        .credits-disclaimer { font-size: 16px; color: #aaa; margin-top: 100px; line-height: 1.6; }
+
+        /* 重启按钮 */
+        .restart-container {
+            position: fixed;
+            bottom: 50px; left: 0; width: 100%; text-align: center;
+            opacity: 0; 
+            z-index: 99999;
+            pointer-events: none;
+        }
+        .restart-container.show { 
+            animation: fade-in-btn 2s forwards; 
+            pointer-events: auto;
+        }
+        .restart-btn { 
+            padding: 20px 50px; background: rgba(0,0,0,0.8); 
+            border: 2px solid #fff; color: #fff; cursor: pointer; 
+            font-family: 'Press Start 2P'; font-size: 16px;
+            transition: all 0.3s;
+        }
+        .restart-btn:hover { background: #fff; color: #000; }
+        @keyframes fade-in-btn { to { opacity: 1; } }
+
+        .true-end-container { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .true-end-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+        .true-end-text { z-index: 10; color: #333; text-shadow: 0 0 20px #fff; animation: fadeIn 3s; text-align: center;}
+
+        /* --- 画廊 --- */
+        #gallery-layer { background: rgba(5,5,5,0.98); z-index: 950; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 30px;} 
+        .gallery-item { width: 120px; height: 80px; border: 1px solid #333; display: flex; justify-content: center; align-items: center; background: #111; overflow: hidden; cursor: pointer;}
+        .gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s;}
+        .gallery-item:hover img { transform: scale(1.1); }
+        .locked { filter: grayscale(100%) brightness(0.1); pointer-events: none; }
+        
+        #image-viewer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 99999;
+            display: none; justify-content: center; align-items: center; cursor: zoom-out;
+        }
+        #image-viewer img { max-width: 90%; max-height: 90%; border: 2px solid #fff; }
+
+        .hidden { display: none !important; }
+        @keyframes fadeIn { from {opacity:0} to {opacity:1} }
+    </style>
+</head>
+<body>
+
+    <audio id="sfx-logo" src="logo.m4a"></audio>
+    <audio id="sfx-glitch" src="glitch.mp3" loop></audio>
+    <audio id="bgm-main" src="theme.m4a" loop></audio>
+
+   <div id="warning-screen" class="scene-layer active">
+    <div class="warn-icon">⚠️</div>
+    <div style="font-size: 36px; color: #ff0000; margin-bottom: 30px; font-weight: bold; text-transform: uppercase;">
+        光敏性癫痫警告
+    </div>
+    <div class="warn-body" style="font-size: 18px; color: #ff5555; line-height: 1.7;">
+        本程序包含高强度闪烁、快速画面切换及故障音效。<br>
+        若您或您的监护人有光敏性癫痫史，请立即关闭本页面。<br><br>
+        继续操作即表示您已知悉风险并自愿承担一切后果。
+    </div>
+    <div class="warn-hint" style="margin-top: 60px; font-size: 14px; color: #800;">[ 点击屏幕以确认并继续 ]</div>
+</div>
+
+    <div id="splash-screen" class="scene-layer"><img id="studio-logo" src="qianxia.png"></div>
+
+    <div id="main-menu" class="scene-layer">
+        <div class="game-title">饲 养</div>
+        <div style="letter-spacing: 5px; color: #ccc; margin-bottom: 50px;">- THE INCUBATION -</div>
+        <button class="menu-btn" type="button" onclick="startNewGame()">[ 建立连接 ]</button>
+        <button class="menu-btn" type="button" id="btn-continue" onclick="loadGame()">[ 继续观测 ]</button>
+        <button class="menu-btn hidden" type="button" id="btn-free-mode" onclick="startFreeMode()">[ 自由养成 ]</button>
+        <button class="menu-btn" type="button" onclick="openGallery()">[ 记忆碎片 ]</button>
+    </div>
+
+    <div id="intro-cg-layer" class="scene-layer" onclick="nextCG()">
+        <div class="cg-text-container" id="cg-content"></div>
+        <div style="margin-top:50px; font-size:12px; color:#ccc;" id="cg-hint-text">[ 点击继续 ]</div>
+    </div>
+
+    <div id="device-layer" class="scene-layer">
+        <div id="device">
+            <div id="screen">
+                <div id="boot-terminal"></div>
+                <div id="character-display" class="hidden">
+                    <img id="sprite-img" class="hidden" src="girl.png">
+                    <div id="name-screen" class="input-screen hidden">
+                        <p style="font-size: 10px; color: #333; margin-bottom:10px;">> 定义对象代号:</p>
+                        <input type="text" id="name-input" maxlength="8" placeholder="NAME..." autocomplete="off">
+                        <button class="btn-confirm" type="button" onclick="submitName()">确 认</button>
+                    </div>
+                    <div id="sin-menu">
+                        <div class="menu-header">选择注入代码:</div>
+                        <div class="sin-grid" id="sin-buttons"></div>
+                        <button class="btn-close" type="button" onclick="closeSubMenu()">取消</button>
+                    </div>
+                    <div id="dialogue-menu">
+                        <div class="dialogue-box">
+                            <div id="dialogue-q">...</div><div id="dialogue-opts"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="text-box"></div>
+            </div>
+            <div id="controls-area">
+                <div id="game-controls" class="control-group hidden">
+                    <button class="btn-love" type="button" onclick="actionLove()">给予理智</button>
+                    <button class="btn-sin" type="button" onclick="openSinMenu()">喂食罪孽</button>
+                    <button class="btn-neutral" type="button" onclick="actionClean()">清理数据</button>
+                    <button class="btn-neutral" type="button" onclick="openDialogue()">对话</button>
+                    <button class="btn-neutral" type="button" style="grid-column: span 2; background:#222;" onclick="saveGame()">保存进度</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ending-layer" class="scene-layer"></div>
+
+    <div id="credits-layer" class="scene-layer">
+        <img src="cg_true_end_credits.jpg" class="credits-bg">
+        <div id="credits-scroll-container" class="credits-scroll">
+            <div class="credits-content">
+                <div class="credits-header">STAFF LIST</div>
+                <div class="credits-section"><div class="credits-role">编写人员</div><div class="credits-name">千夏蝉时雨</div></div>
+                <div class="credits-section"><div class="credits-role">脚本</div><div class="credits-name">千夏蝉时雨</div></div>
+                <div class="credits-section"><div class="credits-role">音乐制作&配乐</div><div class="credits-name">4008         《誰も時を刻まない》</div></div>
+                <div class="credits-section"><div class="credits-role">美工</div><div class="credits-name">Nano Banana Pro</div></div>
+                <div class="credits-section"><div class="credits-role">特别感谢</div><div class="credits-name">4008</div></div>
+                <br><br>
+                <div class="credits-disclaimer">
+                    作者声明：本作品素材均来源于网络，经整合后服务于原创内容创作。 如有雷同，纯属虚构<br>
+                    作者个人：<br>
+                    GITCODE平台：https://gitcode.com/2301_78668329<br>
+                    GITHUB平台：https://github.com/users/Ashleykawaii233<br>
+                    个人公众号：gh_963d180ac635<br>
+                    4008网易云：sdkdf4008 https://163cn.tv/VT3UVcP (@网易云音乐)
+                </div>
+            </div>
+        </div>
+        <div id="restart-btn-container" class="restart-container">
+            <button onclick="location.reload()" class="restart-btn" type="button">[ REBOOT SYSTEM ]</button>
+        </div>
+    </div>
+
+    <div id="gallery-layer" class="scene-layer">
+        <h2 style="color:white; margin-bottom:20px; font-family:'Noto Serif SC'">MEMORIES</h2>
+        <div class="gallery-grid" id="gallery-content"></div>
+        <button class="menu-btn" type="button" style="margin-top:30px;" onclick="closeGallery()">[ 返回标题 ]</button>
+    </div>
+    
+    <div id="image-viewer" onclick="this.style.display='none'"><img id="viewer-img" src=""></div>
+    <div id="fullscreen-closeup" class="scene-layer"><img id="closeup-img" src="girl.png"></div>
+
+    <script>
+        let state = { name: "???", sanity: 50, sin: 0, dialogueCount: 0, sinFedCount: 0, tagVerified: false, isFreeMode: false };
+        let typingTimer = null; 
+
+        const freeDialogues = [
+            {q:"今天天气真好，适合一起发呆呢。", a:[{t:"是啊，很舒服。", type:"good"}, {t:"可惜只能在屏幕里看。", type:"good"}]},
+            {q:"只要能看见你，我就觉得很安心。", a:[{t:"我也是。", type:"good"}, {t:"我会一直陪着你。", type:"good"}]},
+            {q:"你给我的名字，我很喜欢。", a:[{t:"那是一辈子的约定。", type:"good"}, {t:"因为很适合你。", type:"good"}]},
+            {q:"想去海边看看...你会带我去吗？", a:[{t:"总有一天会的。", type:"good"}, {t:"我们现在就假装在海边。", type:"good"}]}
+        ];
+        const normalDialogues = [
+            {q:"外面...有光吗？", a:[{t:"一片漆黑。", type:"bad"}, {t:"有温暖的阳光。", type:"good"}]},
+            {q:"如果你厌倦了，会删掉我吗？", a:[{t:"或许吧。", type:"bad"}, {t:"永远不会。", type:"good"}]},
+            {q:"我有时候觉得身体好重...", a:[{t:"那是罪的重量。", type:"bad"}, {t:"我会分担你的痛苦。", type:"good"}]}
+        ];
+        const sins = ['傲慢', '嫉妒', '暴怒', '懒惰', '贪婪', '暴食', '色欲'];
+
+        // 所有可收集的 CG 列表（用于画廊）
+        const ALL_CG_LIST = ["cg_wasteland.jpg", "cg_gate.jpg", "cg_cocoon_off.jpg", "cg_cocoon_on.jpg", "cg_ture_end.jpg"];
+
+        window.onload = () => { 
+            document.getElementById('warning-screen').onclick = initAudioAndStart; 
+            // 检查是否已通关真结局，决定是否解锁自由模式
+            if(localStorage.getItem("game_cleared_final") === "true") {
+                const btn = document.getElementById('btn-free-mode');
+                btn.classList.remove('hidden');
+                btn.classList.add('unlocked');
+            }
+        };
+
+        function typeText(text, cb) {
+            const el = document.getElementById('text-box');
+            el.innerHTML = "";
+            if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+            let i = 0;
+            typingTimer = setInterval(() => {
+                if (i < text.length) {
+                    if (text.charAt(i) === '<') {
+                        let closeIdx = text.indexOf('>', i);
+                        if (closeIdx !== -1) { el.innerHTML += text.substring(i, closeIdx + 1); i = closeIdx + 1; } 
+                        else { el.innerHTML += text.charAt(i); i++; }
+                    } else { el.innerHTML += text.charAt(i); i++; }
+                    el.scrollTop = el.scrollHeight;
+                } else { clearInterval(typingTimer); typingTimer = null; if (cb) cb(); }
+            }, 30);
+        }
+
+        function switchScene(hideId, showId) {
+            if(hideId) document.getElementById(hideId).classList.remove('active');
+            setTimeout(() => { if(showId) document.getElementById(showId).classList.add('active'); }, 1500);
+        }
+
+        function initAudioAndStart() {
+            document.getElementById('warning-screen').onclick = null;
+            ['sfx-logo', 'sfx-glitch', 'bgm-main'].forEach(id => {
+                const a = document.getElementById(id);
+                if(a) { a.volume = 0.1; a.play().then(()=>{ a.pause(); a.currentTime=0; a.volume=1.0; }).catch(console.log); }
+            });
+            switchScene('warning-screen', 'splash-screen');
+            setTimeout(startLogo, 2000);
+        }
+
+        function startLogo() {
+            document.getElementById('studio-logo').style.opacity = 1;
+            setTimeout(() => { document.getElementById('sfx-logo').play().catch(console.log); }, 1500);
+            setTimeout(() => {
+                document.getElementById('studio-logo').style.opacity = 0;
+                switchScene('splash-screen', 'main-menu');
+                document.getElementById('bgm-main').volume = 0.5;
+                document.getElementById('bgm-main').play().catch(console.log);
+                checkSave();
+            }, 5000);
+        }
+
+        const cgSeq = [
+            { t: "公元 20XX 年。\n旧世界的数据网络已化为一片荒原。", bg: "cg_wasteland.jpg" },
+            { t: "你是一名行走在代码废墟中的「拾荒者」。", bg: "cg_wasteland.jpg" },
+            { t: "警告：正在进入 [ 第七禁区 ] ...", bg: "cg_gate.jpg", s: "color:#ff5555;" },
+            { t: "检测到高能反应。\n坐标锁定：扇区 0x666。", bg: "cg_gate.jpg", s: "color:#0f0;" },
+            { t: "防火墙正在溶解...\n你看到了那个被封印的「茧」。", bg: "cg_cocoon_off.jpg" },
+            { t: "前任管理员的最后一条日志：\n“不要回应她的呼唤。这不是程序，这是诅咒。”", bg: "cg_cocoon_off.jpg", s: "color:red; font-weight:bold;" },
+            { t: "但你已经太久没有听到活物的声音了。", bg: "cg_cocoon_off.jpg" },
+            { t: "你将手放在了回车键上。", bg: "cg_cocoon_off.jpg" },
+            { t: ">>> 正在下载灵魂数据...", bg: "cg_cocoon_on.jpg", s: "color:#0f0;" },
+            { t: "下载完成。\n容器 [ THE_VESSEL ] 已启动。", bg: "cg_cocoon_on.jpg", s: "color:#0f0;" },
+            { t: "现在，她是你的了。", bg: "cg_cocoon_on.jpg" }
+        ];
+        let cgIdx = 0;
+
+        function startNewGame() {
+            state.isFreeMode = false;
+            localStorage.removeItem("bonsai_save_data");
+            state = { name: "???", sanity: 50, sin: 0, dialogueCount: 0, sinFedCount: 0, tagVerified: false, isFreeMode: false };
+            switchScene('main-menu', 'intro-cg-layer');
+            cgIdx = 0; setTimeout(showCG, 1600);
+        }
+
+        function startFreeMode() {
+            // 必须通关才能进入
+            if(localStorage.getItem("game_cleared_final") !== "true") return;
+            const savedName = localStorage.getItem("player_name") || "";
+            state = { name: savedName, sanity: 100, sin: 0, dialogueCount: 0, sinFedCount: 0, tagVerified: true, isFreeMode: true };
+            const hideId = document.querySelector('.scene-layer.active').id;
+            switchScene(hideId, 'device-layer');
+            setTimeout(() => {
+                document.getElementById('device').classList.add('device-active');
+                document.getElementById('device').classList.add('powered-up');
+                initGameUI(true);
+                saveGame();
+            }, 1600);
+        }
+
+        function showCG() {
+            const d = cgSeq[cgIdx];
+            document.getElementById('intro-cg-layer').style.backgroundImage = `url('${d.bg}')`;
+            document.getElementById('cg-content').innerHTML = `<div class="cg-line" style="${d.s||''}">${d.t.replace(/\n/g,'<br>')}</div>`;
+            document.getElementById('cg-hint-text').innerText = (cgIdx === cgSeq.length-1) ? "[ 开始孵化 ]" : "[ 点击继续 ]";
+            unlockGallery(d.bg);
+        }
+
+        function nextCG() { cgIdx++; if(cgIdx < cgSeq.length) showCG(); else enterGame(); }
+
+        function loadGame() {
+            const saved = localStorage.getItem(SAVE_KEY);
+            if (saved) { state = JSON.parse(saved); enterGame(false); }
+        }
+
+        function enterGame(playBoot = true) {
+            const hideId = document.querySelector('.scene-layer.active').id;
+            switchScene(hideId, 'device-layer');
+            setTimeout(() => {
+                document.getElementById('device').classList.add('device-active');
+                if(playBoot) runBootSequence(); else initGameUI(false);
+            }, 1600);
+        }
+
+        function runBootSequence() {
+            const term = document.getElementById('boot-terminal');
+            document.getElementById('character-display').classList.add('hidden');
+            document.getElementById('text-box').innerHTML = "";
+            term.style.display = 'flex'; term.innerHTML = "";
+            const lines = ["BIOS DATE 20XX-09-22", "CPU: QUANTUM CORE ... OK", "MEM: OVERFLOW ... OK", "LOADING KERNEL ...", "MOUNTING SOUL ...", "SYSTEM READY."];
+            let i = 0;
+            function printLine() {
+                if (i < lines.length) {
+                    let p = document.createElement('div'); p.className = 'boot-line'; p.innerText = lines[i];
+                    term.appendChild(p); i++; setTimeout(printLine, 400);
+                } else { setTimeout(() => { term.style.display = 'none'; initGameUI(true); }, 1000); }
+            }
+            printLine();
+        }
+
+        function initGameUI(isNew) {
+            document.getElementById('character-display').classList.remove('hidden');
+            if(isNew) {
+                const img = document.getElementById('sprite-img');
+                img.classList.remove('hidden');
+                if(state.isFreeMode) {
+                    if(state.name && state.name !== "???") {
+                        img.style.filter = "none";
+                        document.getElementById('game-controls').classList.remove('hidden');
+                        typeText(`欢迎回来，${state.name}。<br>这里永远是安全的。`);
+                    } else {
+                        img.style.filter = "grayscale(50%)";
+                        document.getElementById('text-box').innerHTML = ">>> 自由模式启动。<br>>>> 重构记忆链接...";
+                        setTimeout(() => {
+                            document.getElementById('name-screen').classList.remove('hidden');
+                            document.getElementById('name-screen').style.display = "flex"; 
+                        }, 500);
+                    }
+                } else {
+                    img.style.filter = "grayscale(100%) blur(5px)";
+                    document.getElementById('text-box').innerHTML = ">>> 系统连接成功。<br>>>> 正在请求对象权限...";
+                    setTimeout(() => {
+                        document.getElementById('name-screen').classList.remove('hidden');
+                        document.getElementById('name-screen').style.display = "flex"; 
+                    }, 500);
+                }
+            } else {
+                loadVisuals();
+                document.getElementById('game-controls').classList.remove('hidden');
+                typeText("欢迎回来，观测者。");
+            }
+        }
+
+        function submitName() {
+            const v = document.getElementById('name-input').value.trim();
+            if(v) { state.name = v; localStorage.setItem("player_name", v); }
+            document.getElementById('name-screen').classList.add('hidden');
+            document.getElementById('sprite-img').style.transition = "2s";
+            document.getElementById('sprite-img').style.filter = "none";
+            
+            if(state.isFreeMode) {
+                 triggerCloseup(); 
+                 typeText(`${state.name}... 我好想你。<br>请不要再离开我了。`, () => {
+                    setTimeout(() => { document.getElementById('game-controls').classList.remove('hidden'); }, 1000);
+                 });
+            } else {
+                triggerCloseup(); 
+                typeText(`${state.name}: ......你是谁？<br>(已建立精神链接)`, () => {
+                    setTimeout(() => {
+                        document.getElementById('game-controls').classList.remove('hidden');
+                        saveGame();
+                    }, 1000);
+                });
+            }
+        }
+
+        function actionLove() {
+            state.sanity += 10; state.sin = Math.max(0, state.sin - 5);
+            updateVisuals('love');
+            typeText(`你给予了温柔的爱抚。<br>${state.name} 看起来很安心。<br>(理智+10)`);
+            checkProgress();
+        }
+
+        function actionClean() {
+            state.sin = Math.max(0, state.sin - 10);
+            updateVisuals('neutral');
+            typeText(`清理了系统缓存与冗余数据。<br>环境变得整洁了。<br>(罪孽-10)`);
+            checkProgress();
+        }
+
+        function openSinMenu() {
+            document.getElementById('sin-menu').style.display = 'flex';
+            const grid = document.getElementById('sin-buttons');
+            grid.innerHTML = "";
+            sins.forEach(s => {
+                const b = document.createElement('button'); b.className = 'btn-sin-opt'; b.innerText = s;
+                b.type = "button";
+                b.onclick = (e) => { e.preventDefault(); feedSin(s); };
+                grid.appendChild(b);
+            });
+        }
+        function feedSin(name) {
+            state.sinFedCount++; state.sin += 20; state.sanity -= 15;
+            closeSubMenu(); updateVisuals('sin');
+            typeText(`注入罪孽代码：[${name}]...<br>警告：系统不稳定性增加。<br>当前承受次数：${state.sinFedCount}/5`);
+            if(state.sinFedCount >= 5 && !state.isFreeMode) { setTimeout(triggerBadEnding, 2000); }
+        }
+
+        function openDialogue() {
+            const d = state.isFreeMode ? freeDialogues[Math.floor(Math.random()*freeDialogues.length)] : normalDialogues[Math.floor(Math.random()*normalDialogues.length)];
+            document.getElementById('dialogue-q').innerText = `${state.name}: ${d.q}`;
+            const box = document.getElementById('dialogue-opts');
+            box.innerHTML = "";
+            d.a.forEach(opt => {
+                const b = document.createElement('button'); b.className = 'dialogue-btn'; b.innerText = "> " + opt.t;
+                b.type = "button";
+                b.onclick = (e) => { e.preventDefault(); answerDialogue(opt.type); };
+                box.appendChild(b);
+            });
+            document.getElementById('dialogue-menu').style.display = 'flex';
+        }
+        function answerDialogue(type) {
+            closeSubMenu();
+            if(type === 'good') {
+                state.sanity += 15; state.sin -= 5;
+                typeText(`${state.name} 露出了微笑。<br>(理智大幅上升)`);
+                updateVisuals('love');
+            } else {
+                state.sin += 15; state.sanity -= 10;
+                typeText(`${state.name} 低下了头，似乎很失落。<br>(罪孽加深)`);
+                updateVisuals('sin');
+            }
+            checkProgress();
+        }
+
+        function closeSubMenu() {
+            document.getElementById('sin-menu').style.display = 'none';
+            document.getElementById('dialogue-menu').style.display = 'none';
+        }
+
+        function updateVisuals(mood) {
+            const img = document.getElementById('sprite-img');
+            if(mood === 'sin') img.style.filter = "grayscale(1) contrast(1.2)";
+            else if(mood === 'love') img.style.filter = "sepia(0.3) brightness(1.1)";
+            else img.style.filter = "none";
+        }
+
+        function checkProgress() {
+            if(state.isFreeMode) return; 
+            if(state.sanity > 100 && state.sin < 20) { setTimeout(triggerGoodEnding, 2000); }
+        }
+
+        function triggerCloseup() {
+            document.getElementById('fullscreen-closeup').classList.add('active');
+            setTimeout(() => document.getElementById('fullscreen-closeup').classList.remove('active'), 2000);
+        }
+
+        const SAVE_KEY = "bonsai_save_data"; 
+        const GALLERY_KEY = "bonsai_gallery_unlocked";
+
+        function saveGame() { 
+            localStorage.setItem(SAVE_KEY, JSON.stringify(state)); 
+            typeText("进度已保存。"); 
+        }
+
+        function checkSave() { 
+            if(localStorage.getItem(SAVE_KEY)) document.getElementById('btn-continue').classList.remove('disabled'); 
+        }
+        
+        function unlockGallery(imgSrc) { 
+            let unlocked = JSON.parse(localStorage.getItem(GALLERY_KEY) || "[]"); 
+            if (!unlocked.includes(imgSrc)) { 
+                unlocked.push(imgSrc); 
+                localStorage.setItem(GALLERY_KEY, JSON.stringify(unlocked)); 
+            } 
+        }
+        
+        function openGallery() {
+            switchScene('main-menu', 'gallery-layer'); 
+            const content = document.getElementById('gallery-content'); 
+            content.innerHTML = "";
+
+            const unlocked = JSON.parse(localStorage.getItem(GALLERY_KEY) || "[]");
+            const hasCleared = localStorage.getItem("game_cleared_final") === "true";
+
+            ALL_CG_LIST.forEach(src => {
+                const div = document.createElement('div'); 
+                div.className = "gallery-item";
+                div.innerHTML = `<img src="${src}">`;
+
+                // 如果未通关，则全部锁定；否则仅未解锁的锁定
+                if (!hasCleared || !unlocked.includes(src)) {
+                    div.classList.add("locked");
+                } else {
+                    div.onclick = () => {
+                        document.getElementById('image-viewer').style.display = 'flex';
+                        document.getElementById('viewer-img').src = src;
+                    };
+                }
+
+                content.appendChild(div);
+            });
+        }
+
+        function closeGallery() { 
+            switchScene('gallery-layer', 'main-menu'); 
+        }
+
+        function loadVisuals() {
+            document.getElementById('sprite-img').classList.remove('hidden');
+            updateVisuals(state.sin > state.sanity ? 'sin' : 'love');
+        }
+
+        function triggerBadEnding() {
+            document.getElementById('game-controls').classList.add('hidden');
+            document.getElementById('bgm-main').pause();
+            document.body.classList.add('system-collapse');
+            document.getElementById('character-display').style.overflow = "visible"; 
+            
+            // 使用贴脸大图（如果存在），否则回退
+            const closeupImg = new Image();
+            closeupImg.src = "girl_closeup.png";
+            closeupImg.onload = () => {
+                document.getElementById('sprite-img').src = "girl_closeup.png";
+            };
+            closeupImg.onerror = () => {
+                // fallback
+                document.getElementById('sprite-img').src = "girl.png";
+            };
+
+            document.getElementById('sprite-img').classList.add('collapsing');
+            
+            const glitch = document.getElementById('sfx-glitch');
+            if(glitch) { glitch.currentTime=0; glitch.play().catch(e=>console.log(e)); }
+            document.getElementById('text-box').innerHTML = "警告：系统核心崩溃！<br>FATAL ERROR...";
+
+            setTimeout(() => {
+                document.body.classList.remove('system-collapse');
+                document.body.style.backgroundColor = 'black';
+                if(glitch) glitch.pause();
+                document.getElementById('device-layer').style.display = 'none';
+
+                setTimeout(() => {
+                    const layer = document.getElementById('ending-layer');
+                    layer.innerHTML = `
+                        <div class="bsod-modern">
+                            <div class="sad-face">:(</div>
+                            <div class="bsod-title">你的设备遇到问题，需要重启。</div>
+                            <div class="bsod-text">我们只收集某些错误信息，然后你可以重新启动。</div>
+                            <br><br>
+                            <div class="bsod-percent"><span id="bsod-progress">0</span>% 完成</div>
+                            <div class="bsod-footer">
+                                <img src="bsod_qr.jpg" class="bsod-qr-img">
+                                <div class="bsod-details">
+                                    终止代码: SYSTEM_THREAD_EXCEPTION_NOT_HANDLED<br>
+                                    失败的操作: QIANXIA_SOUL.sys
+                                </div>
+                            </div>
+                        </div>`;
+                    layer.classList.add('active'); 
+                    document.getElementById('device-layer').classList.remove('active');
+
+                    let p = 0;
+                    const interval = setInterval(() => {
+                        if (p < 100) { p += Math.floor(Math.random() * 3); if(p>100) p=100; document.getElementById('bsod-progress').innerText = p; } 
+                        else { clearInterval(interval); }
+                    }, 200);
+                    localStorage.removeItem(SAVE_KEY);
+                }, 2000);
+            }, 3000);
+        }
+
+        function triggerGoodEnding() {
+            document.getElementById('game-controls').classList.add('hidden');
+            unlockGallery("cg_ture_end.jpg");
+            localStorage.setItem("game_cleared_final", "true");
+
+            const layer = document.getElementById('ending-layer');
+            layer.className = "scene-layer active"; 
+            layer.innerHTML = `<div class="true-end-container"><img src="cg_ture_end.jpg" class="true-end-img"><div class="true-end-text"><h1>ASCENSION</h1><p>救赎达成</p></div></div>`;
+            
+            switchScene('device-layer', 'ending-layer');
+            localStorage.removeItem(SAVE_KEY);
+
+            setTimeout(() => {
+                switchScene('ending-layer', 'credits-layer');
+                document.querySelector('.credits-scroll').classList.add('rolling');
+                setTimeout(() => { document.getElementById('restart-btn-container').classList.add('show'); }, 32000); 
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
